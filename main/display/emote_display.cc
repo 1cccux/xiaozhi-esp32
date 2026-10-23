@@ -182,11 +182,21 @@ EmoteDisplay::~EmoteDisplay() {
     }
 }
 
-void EmoteDisplay::SetEmotion(const char* const emotion) {
+bool EmoteDisplay::SetEmotion(const char* const emotion) {
     ESP_LOGI(TAG, "SetEmotion: %s", emotion);
-    if (emote_handle_ && emotion && strlen(emotion) > 0) {
-        emote_set_anim_emoji(emote_handle_, emotion);
+    if (emote_handle_ == nullptr || emotion == nullptr || strlen(emotion) == 0) {
+        return false;
     }
+    // The result was already being produced and discarded. An emotion the mounted asset pack
+    // does not carry fails inside emote_set_emoji_animation, and callers had no way to find
+    // out: an MCP tool, a server-driven emotion or a board's own avatar mapping all saw the
+    // same silence as a success.
+    esp_err_t err = emote_set_anim_emoji(emote_handle_, emotion);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "emotion \"%s\" not set: %s", emotion, esp_err_to_name(err));
+        return false;
+    }
+    return true;
 }
 
 void EmoteDisplay::SetChatMessage(const char* const role, const char* const content) {
@@ -297,7 +307,9 @@ void EmoteDisplay::Unlock() {}
 bool EmoteDisplay::StopAnimDialog() {
     ESP_LOGI(TAG, "StopAnimDialog");
     if (emote_handle_) {
-        return emote_stop_anim_dialog(emote_handle_);
+        // esp_err_t, where ESP_OK is 0: returned as bool it reports false on success and true on
+        // failure. GetAssetData and SetEmotion compare against ESP_OK for the same reason.
+        return emote_stop_anim_dialog(emote_handle_) == ESP_OK;
     }
     return false;
 }
@@ -305,7 +317,7 @@ bool EmoteDisplay::StopAnimDialog() {
 bool EmoteDisplay::InsertAnimDialog(const char* emoji_name, uint32_t duration_ms) {
     ESP_LOGI(TAG, "InsertAnimDialog: %s, %" PRIu32, emoji_name, duration_ms);
     if (emote_handle_ && emoji_name) {
-        return emote_insert_anim_dialog(emote_handle_, emoji_name, duration_ms);
+        return emote_insert_anim_dialog(emote_handle_, emoji_name, duration_ms) == ESP_OK;
     }
     return false;
 }
